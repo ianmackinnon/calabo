@@ -1,4 +1,8 @@
 # Calabó
 
-Command-line CNC router control software.
+Grbl CNC router control server with HTTP interface.
 
+
+## Status
+
+Incomplete, under development.

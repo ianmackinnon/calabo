@@ -36,9 +36,9 @@ setuptools.setup(
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: OS Independent",
     ],
-    install_requires=["pyserial"],
+    install_requires=["flask", "pyserial"],
     python_requires='>=3',
-    scripts=[],
+    scripts=["scripts/calabo-server"],
     setup_requires=["pytest-runner"],
-    tests_requires=["pytest", "tox", "coverage", "pytest-cov"],
+    tests_require=["pytest", "requests"],
 )

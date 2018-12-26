@@ -1,0 +1,43 @@
+{
+  "step-pulse-time": 10,
+  "step-idle-delay": 255,
+  "step-pulse-invert": 0,
+  "step-direction-invert": 2,
+  "step-invert": false,
+  "invert-step-enable-pin": false,
+  "invert-limit-pins": false,
+
+  "status-report-options": 115,
+  "junction-deviation": 0.020,
+  "arc-tolerance": 0.002,
+  "report-in-inches": false,
+
+  "homing-cycle-enable": true,
+  "soft-limits-enable": true,
+  "hard-limits-enable": true,
+  "homing-direction-invert": 3,
+  "homing-locate-feed-rate": 25.000,
+  "homing-search-seek-rate": 1750.000,
+  "homing-switch-debounce-delay": 250,
+  "homing-switch-pull-off-distance": 1.000,
+
+  "maximum-spindle-speed": 12000,
+  "minimum-spindle-speed": 0,
+  "laser-mode-enable": false,
+
+  "x-axis-steps-per-millimeter": 40.000,
+  "y-axis-steps-per-millimeter": 40.000,
+  "z-axis-steps-per-millimeter": 188.975,
+
+  "x-axis-maximum-rate": 8000.000,
+  "y-axis-maximum-rate": 8000.000,
+  "z-axis-maximum-rate": 500.000,
+
+  "x-axis-maximum-acceleration": 500.000,
+  "y-axis-maximum-acceleration": 500.000,
+  "z-axis-maximum-acceleration": 50.000,
+
+  "x-axis-maximum-travel": 790.000,
+  "y-axis-maximum-travel": 790.000,
+  "z-axis-maximum-travel": 100.000
+}
