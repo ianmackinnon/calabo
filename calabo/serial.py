@@ -18,8 +18,8 @@ import logging
 
 
 
-DEFAULT_READ_LINE_TIMEOUT = 1.0
-DEFAULT_READ_LINE_INTERVAL = 0.1
+DEFAULT_READ_LINE_TIMEOUT = 0.002
+DEFAULT_READ_LINE_INTERVAL = 0.001
 DEFAULT_BAUD_RATE = 115200
 DEFAULT_EOL = "\n"
 
@@ -30,19 +30,19 @@ LOG = logging.getLogger("calabo.serial")
 
 
 class Serial():
-    def __init__(self, device, name=None, write_eol=None):
+    def __init__(self, device, name=None, write_eol=None, realtime_hooks=None):
         self._device = device
         self._name = name or device
-        self._conn = None
+        self._ser = None
         self._write_eol = write_eol or DEFAULT_EOL
+        self._hooks = realtime_hooks
+
+        self._line = ""
+        self._last_char = ""
 
 
     def __enter__(self):
-        baud = DEFAULT_BAUD_RATE
-        if hasattr(self._device, "__call__"):
-            self._device = self._device()
-
-        self._ser = serial.Serial(self._device, baud)
+        self._ser = serial.Serial(self._device, DEFAULT_BAUD_RATE)
         return self
 
 
@@ -56,26 +56,42 @@ class Serial():
 
 
     def read_line(self, timeout=None, interval=None):
+        """\
+Accepts `CR`, `LF`, or `CRLF`.
+
+Returns a line without line endings, a callable hook function, or `None` on timeout.
+"""
         if timeout is None:
             timeout = DEFAULT_READ_LINE_TIMEOUT
         if interval is None:
             interval = DEFAULT_READ_LINE_INTERVAL
 
         elapsed = 0
-        LOG.debug("Serial wait %s", self._name)
         while True:
-            if self._ser.in_waiting:
-                line = self._ser.readline().decode("utf-8").strip()
-                LOG.debug("Serial read %s %s", self._name, repr(line))
-                return line
+            if not self._ser.in_waiting:
+                time.sleep(interval)
+                elapsed += interval
 
-            time.sleep(interval)
-            elapsed += interval
+                if timeout is not False and elapsed >= timeout:
+                    break
 
-            if timeout is not False and elapsed >= timeout:
-                break
+            char = self._ser.read().decode("utf-8")
+            if char in "\r\n":
+                last_pair = self._last_char + char
+                self._last_char = char
+                if last_pair == "\r\n":
+                    pass
+                else:
+                    LOG.debug("Serial read %s %s", self._name, repr(self._line))
+                    response = self._line
+                    self._line = ""
+                    return response
+            elif self._hooks and char in self._hooks:
+                return self._hooks[char]
+            else:
+                self._line += char
 
-        LOG.debug("Serial timeout %s %s", self._name, timeout)
+        LOG.debug("Serial timeout %s %s %s", self._name, timeout, self._line)
         return None
 
 

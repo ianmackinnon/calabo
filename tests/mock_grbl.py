@@ -21,6 +21,7 @@ import re
 import sys
 import time
 import errno
+import logging
 from subprocess import Popen, PIPE
 
 # Calabo imports
@@ -32,6 +33,10 @@ from calabo.grbl_settings import SETTINGS, setting_index, \
 
 
 MAX_SOCAT_PARSE_LINES = 10
+
+
+
+LOG = logging.getLogger("mock_grbl")
 
 
 
@@ -95,8 +100,12 @@ Mock Grbl hardware object that provides a serial address for connection.
     def __init__(self, settings=None):
         self._socat_stream = None
         self._serial = None
-        self._connected = False
         self._settings = {k: v["default"] for k, v in SETTINGS.items()}
+
+        self._state = None
+        self._locked = None
+        self._feed_rate = None
+
         if settings:
             self._settings.update(settings)
 
@@ -107,7 +116,11 @@ Mock Grbl hardware object that provides a serial address for connection.
 
         self._serial = Serial(
             self._socat_stream._dev_local,
-            name="mock", write_eol="\r\n")
+            name="mock", write_eol="\r\n",
+            realtime_hooks={
+                "?": self.write_state,
+            }
+        )
         self._serial.__enter__()
 
         return self
@@ -118,22 +131,27 @@ Mock Grbl hardware object that provides a serial address for connection.
         self._socat_stream.__exit__(exception_type, exception_value, traceback)
 
 
-    def connected(self):
-        self._connected = True
+    def reset(self):
+        self._state = "Idle"
+        self._locked = False
+        self._feed_rate = None
 
+        if self._settings[setting_index("homing-cycle-enable")]:
+            self._state = "Alarm"
+            self._locked = True
 
-    def get_device(self):
-        def f():
-            self.connected()
-            return self._socat_stream._dev_remote
-
-        return f
+        self.salutation()
 
 
     def write_calibration(self):
         for key, value in self._settings.items():
             value_str = setting_to_string(key, value)
             self._serial.write_line("$%d=%s" % (key, value_str))
+        self._serial.write_line("ok")
+
+
+    def write_state(self):
+        self._serial.write_line("<%s>" % self._state)
 
 
     def set_setting(self, key, value_str):
@@ -152,20 +170,69 @@ Mock Grbl hardware object that provides a serial address for connection.
         self._serial.write_line("ok")
 
 
-    def process_line(self, line):
-        time.sleep(0.1)
+    def probe(self, z_to):
+        if self._feed_rate is None:
+            self._serial.write_line("error:22")
+            return
 
-        re_setting = re.compile(r"^\$(\d+)=(.+)$")
+        time.sleep(10)
+        self._serial.write_line("ALARM:5")
+        self._serial.write_line("[PRB:0.0000,0.0000,0.0000:0]")
+        self._serial.write_line("ok")
+
+
+    def move(self, x):
+        if self._locked:
+            self._serial.write_line("error:9")
+            return
+
+        self._serial.write_line("ok")
+
+
+    def mill(self, x):
+        if self._feed_rate is None:
+            self._serial.write_line("error:22")
+            return
+
+        self._serial.write_line("ok")
+
+
+    def process_line(self, line):
+        if hasattr(line, "__call__"):
+            line()
+            return
 
         if line == "$$":
             self.write_calibration()
-        elif re_setting.match(line):
-            key, value = re_setting.match(line).groups()
+            return
+
+        match = re.compile(r"^\$(\d+)=(.+)$").match(line)
+        if match:
+            key, value = match.groups()
             key = int(key)
             self.set_setting(key, value)
-        else:
-            self._serial.write_line(
-                "{MockGrbl unexpected request:%s}" % repr(line))
+            return
+
+        match = re.compile(r"^G0 X([\d.]+)$").match(line)
+        if match:
+            (x, ) = match.groups()
+            self.move(x)
+            return
+
+        match = re.compile(r"^G1 X([\d.]+)$").match(line)
+        if match:
+            (x, ) = match.groups()
+            self.mill(x)
+            return
+
+        match = re.compile(r"^G38.2 Z(-?[\d.]+)$").match(line)
+        if match:
+            (z_to, ) = match.groups()
+            self.probe(z_to)
+            return
+
+        self._serial.write_line(
+            "{MockGrbl unexpected request:%s}" % repr(line))
 
 
     def salutation(self):
@@ -173,12 +240,11 @@ Mock Grbl hardware object that provides a serial address for connection.
         self._serial.write_line("Grbl 1.1f ['$' for help]")
         if self._settings[setting_index("homing-cycle-enable")]:
             self._serial.write_line("[MSG:'$H'|'$X' to unlock]")
+        else:
+            self._locked = False
 
 
     def run(self):
-        while not self._connected:
-            time.sleep(0.1)
-        self.salutation()
         while True:
             try:
                 line = self._serial.read_line(timeout=False)

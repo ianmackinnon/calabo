@@ -234,6 +234,20 @@ SETTINGS_KEYS = {v["name"]: k for k, v in SETTINGS.items()}
 
 
 
+STATES = (
+    "Idle",
+    "Run",
+    "Hold",
+    "Jog",
+    "Alarm",
+    "Door",
+    "Check",
+    "Home",
+    "Sleep",
+)
+
+
+
 def setting_index(name):
     return SETTINGS_KEYS[name]
 

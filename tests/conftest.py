@@ -21,6 +21,27 @@ LOG = logging.getLogger("conftest")
 
 def pytest_addoption(parser):
     parser.addoption("--device", action="store", default="/dev/ttyACM0")
+    parser.addoption("--profile", action="store_true")
+
+
+
+def _device_mock():
+    with MockGrbl({
+            setting_index("homing-cycle-enable"): 1
+    }) as mock_grbl:
+        thread = threading.Thread(target=mock_grbl.run)
+        thread.daemon = True
+        thread.start()
+        yield {
+            "address": mock_grbl._socat_stream._dev_remote,
+            "reset": mock_grbl.reset,
+        }
+
+
+
+@pytest.fixture
+def device_mock():
+    yield from _device_mock()
 
 
 
@@ -37,14 +58,14 @@ instantiated and run in a background thread before yielding the address.
         device = pytest.config.option.device
         yield device
     else:
-        with MockGrbl({
-                setting_index("homing-cycle-enable"): 1
-        }) as mock_grbl:
-            thread = threading.Thread(target=mock_grbl.run)
-            thread.daemon = True
-            thread.start()
-            device = mock_grbl.get_device()
-            yield device
+        yield from _device_mock()
+
+
+
+@pytest.fixture
+def grbl_mock(device_mock):
+    with Grbl(device_mock) as grbl:
+        yield grbl
 
 
 
@@ -72,3 +93,9 @@ def calabo_server(device):
 def pytest_generate_tests(metafunc):
     if "device" in metafunc.fixturenames:
         metafunc.parametrize("device", ["hardware", "mock"], indirect=True)
+
+
+
+def pytest_runtest_logreport(report):
+    if report.when == "call" and pytest.config.option.profile:
+        LOG.info("%0.3f", report.duration)

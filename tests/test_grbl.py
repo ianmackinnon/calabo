@@ -11,9 +11,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import sys
 import logging
 
 import pytest
+
+# Calabo imports
+sys.path.append("../")
+import calabo.grbl_exc
 
 
 
@@ -34,6 +39,45 @@ def test_setting_homing(grbl):
 
 
 
+def test_error_9(grbl):
+    """\
+Error 22. Feed rate has not yet been set or is undefined.
+"""
+    grbl.setting("homing-cycle-enable", True)
+    grbl.reset()
+
+    # If device starts with homing enabled it must be unlocked
+    # even if homing is then disabled
+
+    state = grbl.read_state()
+
+    assert state == "Alarm"
+    homing_enabled = grbl.setting("homing-cycle-enable")
+    assert homing_enabled is True
+    with pytest.raises(calabo.grbl_exc.GrblAlarmJogLockError):
+        grbl.move(x=10)
+
+    grbl.setting("homing-cycle-enable", False)
+    with pytest.raises(calabo.grbl_exc.GrblAlarmJogLockError):
+        grbl.move(x=10)
+
+    grbl.reset()
+
+    # If device starts with homing disabled it need not be unlocked
+    # even if homing is then enabled
+
+    state = grbl.read_state()
+    assert state == "Idle"
+
+    homing_enabled = grbl.setting("homing-cycle-enable")
+    assert homing_enabled is False
+    grbl.move(x=10)
+
+    grbl.setting("homing-cycle-enable", True)
+    grbl.move(x=10)
+
+
+
 def test_error_10(grbl):
     """\
 Error 10. Soft limits cannot be enabled without homing also enabled.
@@ -41,7 +85,7 @@ Error 10. Soft limits cannot be enabled without homing also enabled.
 
     grbl.setting("soft-limits-enable", False)
     grbl.setting("homing-cycle-enable", False)
-    with pytest.raises(ValueError):
+    with pytest.raises(calabo.grbl_exc.GrblSoftLimitsError):
         grbl.setting("soft-limits-enable", True)
     grbl._read_settings()
     soft_limits_enabled = grbl.setting("soft-limits-enable")
@@ -57,3 +101,23 @@ Error 10. Soft limits cannot be enabled without homing also enabled.
     homing_enabled = grbl.setting("homing-cycle-enable")
     assert soft_limits_enabled == False
     assert soft_limits_enabled == False
+
+
+
+def test_error_22(grbl):
+    """\
+Error 22. Feed rate has not yet been set or is undefined.
+"""
+
+    grbl.setting("homing-cycle-enable", False)
+    with pytest.raises(calabo.grbl_exc.GrblFeedRateError):
+        grbl.mill(x=10)
+
+    with pytest.raises(calabo.grbl_exc.GrblFeedRateError):
+        grbl.probe(z_to=-50)
+
+
+
+# def test_probe_fail(grbl):
+#     grbl.setting("homing-cycle-enable", False)
+#     grbl.probe(z_to=-50)

@@ -12,11 +12,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
+import time
 import logging
 from collections import defaultdict
 
+import calabo.grbl_exc
 from calabo.serial import Serial
-from calabo.grbl_settings import SETTINGS, SETTINGS_KEYS, \
+from calabo.grbl_settings import STATES, SETTINGS, SETTINGS_KEYS, \
     setting_from_string, setting_to_string
 
 
@@ -34,7 +36,6 @@ class ResponseException(Exception):
 
 class SettingsException(Exception):
     pass
-
 
 
 def handle(pattern):
@@ -56,7 +57,14 @@ Grbl interface object.
 """
 
     def __init__(self, device):
-        self._serial = Serial(device, name="ctrl", write_eol="\n")
+        if hasattr(device, "get"):
+            device_address = device["address"]
+            self._reset_device = device["reset"]
+        else:
+            device_address = device
+            self._reset_device = None
+
+        self._serial = Serial(device_address, name="ctrl", write_eol="\n")
         self._state = None
         self._homed = None
         self._unlocked = None
@@ -66,20 +74,38 @@ Grbl interface object.
 
     def __enter__(self):
         self._serial.__enter__()
-
-        result = self._step()
-        if self._state != "ready":
-            raise ResponseException("No salutation received")
-
-        # Catch homing enabled message if necessary:
-        self._step()
-
-        self._read_settings()
+        self.initialize()
         return self
 
 
     def __exit__(self, exception_type, exception_value, traceback):
         self._serial.__exit__(exception_type, exception_value, traceback)
+
+
+    def initialize(self):
+        if self._reset_device:
+            self._reset_device()
+        else:
+            self._serial._ser.dtr = False
+            time.sleep(0.1)
+            self._serial._ser.dtr = True
+
+        time.sleep(0.1)
+        result = self._step()
+        if self._state != "ready":
+            raise ResponseException("No salutation received")
+
+        self._read_settings()
+
+
+    def reset(self):
+        self._state = None
+        self._homed = None
+        self._unlocked = None
+        self._settings = {}
+        self._last_response = None
+
+        self.initialize()
 
 
     def __repr__(self):  # pragma: no cover
@@ -97,11 +123,16 @@ Grbl interface object.
         pass
 
 
+    @handle(r"^\[PRB:([\d.]),([\d.]),([\d.]),([01])]$")
+    def _prb(self, x, y, z, status):
+        pass
+
+
     @handle(r"^ok$")
     def _ok(self):
         if self._state != "expect_ok":
             raise ResponseException(
-                "Unexpected response received in state %s: 'ok'.",
+                "Unexpected response received in state %s: 'ok'." %
                 self._state)
         self._set_state("ready")
 
@@ -110,8 +141,13 @@ Grbl interface object.
     def _error(self, key):
         key = int(key)
 
-        if key == 10:
-            raise ValueError("Soft limits cannot be enabled without homing also enabled.")
+        for k, v in calabo.grbl_exc.exc.items():
+            if k == key:
+                raise v["class"](v["text"])
+
+        raise ResponseException(
+            "Unexpected error response '%s' received in state %s: 'ok'." % (
+                key, self._state))
 
 
     @handle(r"^\$(\d+)=(.+)$")
@@ -155,6 +191,71 @@ Grbl interface object.
         LOG.debug("set state %s" % self._state)
 
 
+    def _read_settings(self):
+        self._settings = {}
+        self._serial.write_line("$$")
+        self._set_state("read_settings")
+        return self._step()
+
+
+    def _parse_state(self, text):
+        if not text.startswith("<"):
+            raise ResponseException("State does not start with <: %s" % repr(text))
+        if not text.endswith(">"):
+            raise ResponseException("State does not end with >: %s" % repr(text))
+        text = text[1:-1]
+
+        parts = text.split("|")
+
+        state = parts[0]
+        _substate = None
+        if ":" in state:
+            (state, _substate) = state.split(":", 1)
+
+        if state not in STATES:
+            raise ResponseException("Unrecognised state %s in text %s" % (
+                repr(state), repr(text)))
+
+        return state
+
+
+    def read_state(self):
+        self._serial._ser.write(("?").encode("utf-8"))
+        response = ""
+        while True:
+            char = self._serial._ser.read().decode("utf-8").strip()
+            response += char
+            if char == ">":
+                break
+            if len(response) > 255:
+                break
+
+        return self._parse_state(response)
+
+
+    def _write_setting(self, key, value):
+        """`
+`key` should be an integer.
+`value` should be in its native type
+"""
+        while True:
+            state = self.read_state()
+            if state in ("Alarm", ):
+                if self._unlocked is None:
+                    # Grbl boots in alarm state when homing is enabled.
+                    # but settings can still be set.
+                    break
+                raise calabo.grbl_exc.GrblAlarmError()
+            if state in ("Idle", "Jog"):
+                break
+            time.sleep(0.1)
+
+        value_str = setting_to_string(key, value)
+        self._serial.write_line("$%d=%s" % (key, value_str))
+        self._set_state("expect_ok")
+        self._step()
+
+
     def setting(self, key, value=None, from_device=None):
         """
         Get or set a settings option.
@@ -187,10 +288,7 @@ Grbl interface object.
                     "been read from device" % (key))
 
         if not from_device:
-            value_str = setting_to_string(key, value)
-            self._serial.write_line("$%d=%s" % (key, value_str))
-            self._set_state("expect_ok")
-            self._step()
+            self._write_setting(key, value)
 
         self._settings[key] = value
 
@@ -209,8 +307,22 @@ Grbl interface object.
         return None
 
 
-    def _read_settings(self):
-        self._settings = {}
-        self._serial.write_line("$$")
-        self._set_state("read_settings")
-        return self._step()
+    def move(self, x):
+        cmd = "G0 X%f" % x
+        self._serial.write_line(cmd)
+        self._set_state("expect_ok")
+        self._step()
+
+
+    def mill(self, x):
+        cmd = "G1 X%f" % x
+        self._serial.write_line(cmd)
+        self._set_state("expect_ok")
+        self._step()
+
+
+    def probe(self, z_to):
+        cmd = "G38.2 Z%f" % z_to
+        self._serial.write_line(cmd)
+        self._set_state("expect_probe")
+        self._step()
