@@ -39,10 +39,20 @@ def pytest_addoption(parser):
 
 
 
-def _device_mock():
-    with MockGrbl({
-            setting_index("homing-cycle-enable"): 1
-    }) as mock_grbl:
+def _device_mock(request):
+    mark = request.node.get_closest_marker("grbl_options")
+
+    options = None
+    if mark:
+        options = mark.args[0]
+
+    if options:
+        if "settings" in options:
+            options["settings"] = {
+                setting_index(k): v for k, v in options["settings"].items()
+            }
+
+    with MockGrbl(options) as mock_grbl:
         thread = threading.Thread(target=mock_grbl.run)
         thread.daemon = True
         thread.start()
@@ -54,8 +64,8 @@ def _device_mock():
 
 
 @pytest.fixture
-def device_mock():
-    yield from _device_mock()
+def device_mock(request):
+    yield from _device_mock(request)
 
 
 
@@ -74,7 +84,7 @@ instantiated and run in a background thread before yielding the address.
         device = pytest.config.option.device
         yield device
     else:
-        yield from _device_mock()
+        yield from _device_mock(request)
 
 
 

@@ -120,3 +120,33 @@ Error 22. Feed rate has not yet been set or is undefined.
 # def test_probe_fail(grbl):
 #     grbl.setting("homing-cycle-enable", False)
 #     grbl.probe(z_to=-50)
+
+
+
+@pytest.mark.grbl_options({
+    "settings": {
+        "homing-cycle-enable": True,
+    },
+})
+def test_mock_init_1(grbl_mock):
+    """\
+Test initializing mock Grbl with particular parameters.
+"""
+    grbl = grbl_mock
+    homing_enabled = grbl.setting("homing-cycle-enable")
+    assert homing_enabled is True
+
+
+
+@pytest.mark.grbl_options({
+    "settings": {
+        "homing-cycle-enable": False,
+    },
+})
+def test_mock_init_2(grbl_mock):
+    """\
+Test initializing mock Grbl with particular parameters.
+"""
+    grbl = grbl_mock
+    homing_enabled = grbl.setting("homing-cycle-enable")
+    assert homing_enabled is False

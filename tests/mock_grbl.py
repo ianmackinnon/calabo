@@ -97,7 +97,8 @@ class MockGrbl():
 Mock Grbl hardware object that provides a serial address for connection.
 """
 
-    def __init__(self, settings=None):
+    def __init__(self, options=None):
+
         self._socat_stream = None
         self._serial = None
         self._settings = {k: v["default"] for k, v in SETTINGS.items()}
@@ -106,9 +107,8 @@ Mock Grbl hardware object that provides a serial address for connection.
         self._locked = None
         self._feed_rate = None
 
-        if settings:
-            self._settings.update(settings)
-
+        if options and "settings" in options:
+            self._settings.update(options["settings"])
 
     def __enter__(self):
         self._socat_stream = SocatStream()
