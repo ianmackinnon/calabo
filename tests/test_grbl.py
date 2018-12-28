@@ -55,11 +55,11 @@ Error 22. Feed rate has not yet been set or is undefined.
     homing_enabled = grbl.setting("homing-cycle-enable")
     assert homing_enabled is True
     with pytest.raises(calabo.grbl_exc.GrblAlarmJogLockError):
-        grbl.move(x=10)
+        grbl.move(x=1)
 
     grbl.setting("homing-cycle-enable", False)
     with pytest.raises(calabo.grbl_exc.GrblAlarmJogLockError):
-        grbl.move(x=10)
+        grbl.move(x=2)
 
     grbl.reset()
 
@@ -71,11 +71,10 @@ Error 22. Feed rate has not yet been set or is undefined.
 
     homing_enabled = grbl.setting("homing-cycle-enable")
     assert homing_enabled is False
-    grbl.move(x=10)
+    grbl.move(x=3)
 
     grbl.setting("homing-cycle-enable", True)
-    grbl.move(x=10)
-
+    grbl.move(x=4)
 
 
 def test_error_10(grbl):

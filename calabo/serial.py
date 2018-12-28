@@ -29,6 +29,11 @@ LOG = logging.getLogger("calabo.serial")
 
 
 
+class ConnectionClosedException(Exception):
+    pass
+
+
+
 class Serial():
     def __init__(self, device, name=None, write_eol=None, realtime_hooks=None):
         self._device = device
@@ -52,7 +57,10 @@ class Serial():
 
     def write_line(self, line):
         LOG.debug("Serial write %s %s", self._name, repr(line))
-        self._ser.write((line + self._write_eol).encode("utf-8"))
+        try:
+            self._ser.write((line + self._write_eol).encode("utf-8"))
+        except (TypeError, serial.serialutil.SerialException):
+            raise ConnectionClosedException()
 
 
     def read_line(self, timeout=None, interval=None):
@@ -68,14 +76,23 @@ Returns a line without line endings, a callable hook function, or `None` on time
 
         elapsed = 0
         while True:
-            if not self._ser.in_waiting:
+            try:
+                waiting = self._ser.in_waiting
+            except TypeError:
+                raise ConnectionClosedException()
+
+            if not waiting:
                 time.sleep(interval)
                 elapsed += interval
 
                 if timeout is not False and elapsed >= timeout:
                     break
 
-            char = self._ser.read().decode("utf-8")
+            try:
+                char = self._ser.read().decode("utf-8")
+            except (TypeError, serial.serialutil.SerialException):
+                raise ConnectionClosedException()
+
             if char in "\r\n":
                 last_pair = self._last_char + char
                 self._last_char = char

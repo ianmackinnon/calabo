@@ -11,6 +11,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
 import sys
 import time
 import logging
@@ -68,6 +69,8 @@ instantiated and run in a background thread before yielding the address.
 """
 
     if request.param == "hardware":
+        if not os.path.exists(pytest.config.option.device):
+            pytest.skip()
         device = pytest.config.option.device
         yield device
     else:
@@ -110,5 +113,5 @@ def pytest_generate_tests(metafunc):
 
 
 def pytest_runtest_logreport(report):
-    if report.when == "call" and pytest.config.option.profile:
+    if report.when == "call" and pytest.config.option.profile:  # pragma: no cover
         LOG.info("%0.3f", report.duration)

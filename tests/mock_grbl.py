@@ -26,7 +26,7 @@ from subprocess import Popen, PIPE
 
 # Calabo imports
 sys.path.append("../")
-from calabo.serial import Serial
+from calabo.serial import Serial, ConnectionClosedException
 from calabo.grbl_settings import SETTINGS, setting_index, \
     setting_from_string, setting_to_string
 
@@ -198,6 +198,7 @@ Mock Grbl hardware object that provides a serial address for connection.
 
 
     def process_line(self, line):
+
         if hasattr(line, "__call__"):
             line()
             return
@@ -248,8 +249,6 @@ Mock Grbl hardware object that provides a serial address for connection.
         while True:
             try:
                 line = self._serial.read_line(timeout=False)
-            except OSError as e:  # pragma: no cover
-                if e.errno == errno.EBADF:
-                    # Connection disconnected by remote host.
-                    break
+            except ConnectionClosedException:  # pragma: no cover
+                break
             self.process_line(line)
