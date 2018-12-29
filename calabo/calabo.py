@@ -17,12 +17,13 @@ Calabó
 Command-line CNC router control software.
 """
 
+import io
 import sys
 import time
 import json
 import logging
 import threading
-
+import traceback
 
 from flask import Flask, abort, request
 
@@ -120,13 +121,19 @@ class CalaboServer():
 
 
     def run(self):
-        # Errors in this function are not shown
+        try:
+            logging.getLogger("werkzeug").setLevel(logging.WARNING)
+            self._thread_flask = threading.Thread(target=app.run)
+            self._thread_flask.start()
 
-        logging.getLogger("werkzeug").setLevel(logging.WARNING)
-        self._thread_flask = threading.Thread(target=app.run)
-        self._thread_flask.start()
-
-        while True:
-            if self._quit_requested:
-                break
-            time.sleep(0.5)
+            while True:
+                if self._quit_requested:
+                    break
+                time.sleep(0.5)
+        except Exception as e:  # pragma: no cover
+            LOG.error("Unhandled exception in `CalaboServer.run`. Exiting.")
+            stream = io.StringIO()
+            traceback.print_exc(file=stream)
+            LOG.error("\n" + stream.getvalue())
+            LOG.error(e)
+            raise

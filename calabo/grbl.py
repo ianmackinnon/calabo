@@ -118,13 +118,21 @@ Grbl interface object.
         self._set_state("ready")
 
 
-    @handle(r"^\[MSG:.*]$")
-    def _msg(self):
-        pass
+    @handle(r"^\[MSG:(.*)]$")
+    def _msg(self, message):
+        if message == "'$H'|'$X' to unlock":
+            self._unlocked = False
+        elif message == "Caution: Unlocked":
+            self._unlocked = True
 
 
     @handle(r"^\[PRB:([\d.]),([\d.]),([\d.]),([01])]$")
     def _prb(self, x, y, z, status):
+        x = float(x)
+        y = float(y)
+        z = float(z)
+        status = bool(int(status))
+
         pass
 
 
@@ -216,6 +224,8 @@ Grbl interface object.
             raise ResponseException("Unrecognised state %s in text %s" % (
                 repr(state), repr(text)))
 
+
+
         return state
 
 
@@ -241,7 +251,7 @@ Grbl interface object.
         while True:
             state = self.read_state()
             if state in ("Alarm", ):
-                if self._unlocked is None:
+                if self._unlocked is False:
                     # Grbl boots in alarm state when homing is enabled.
                     # but settings can still be set.
                     break
@@ -305,6 +315,12 @@ Grbl interface object.
             LOG.debug("Set setting %d %s %s", key, name, value)
 
         return None
+
+
+    def unlock(self):
+        self._serial.write_line("$X")
+        self._set_state("expect_ok")
+        self._step()
 
 
     def move(self, x):

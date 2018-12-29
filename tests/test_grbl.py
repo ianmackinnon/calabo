@@ -117,8 +117,49 @@ Error 22. Feed rate has not yet been set or is undefined.
 
 
 
+def test_unlock(grbl):
+    homing_enabled = grbl.setting("homing-cycle-enable")
+    if not homing_enabled:
+        grbl.setting("homing-cycle-enable", True)
+        grbl.reset()
+        homing_enabled = grbl.setting("homing-cycle-enable")
+
+    state = grbl.read_state()
+
+    assert homing_enabled == True
+    assert state == "Alarm"
+    assert grbl._unlocked == False
+
+    grbl.unlock()
+    state = grbl.read_state()
+
+    assert homing_enabled == True
+    assert state == "Idle"
+    assert grbl._unlocked == True
+
+
+
+
+# def test_wco(grbl):
+#     grbl.unlock()
+#     LOG.error(grbl._wco)
+#     grbl.read_state()
+#     LOG.error(grbl._wco)
+
+
+
 # def test_probe_fail(grbl):
-#     grbl.setting("homing-cycle-enable", False)
+#     """\
+
+# g0 z-35^Mok
+# g38.2 z-50 f100^MALARM:5
+# [PRB:0.0000,0.0000,0.0000:0]
+# ok
+# g0 z-35^Merror:9
+
+# """
+#     grbl.unlock()
+#     grbl.move()
 #     grbl.probe(z_to=-50)
 
 

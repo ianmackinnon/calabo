@@ -17,11 +17,13 @@ Mock Grbl
 Mock Grbl implementation for testing Calabó.
 """
 
+import io
 import re
 import sys
 import time
 import errno
 import logging
+import traceback
 from subprocess import Popen, PIPE
 
 # Calabo imports
@@ -170,15 +172,24 @@ Mock Grbl hardware object that provides a serial address for connection.
         self._serial.write_line("ok")
 
 
+    def unlock(self):
+        self._locked = False
+        self._state = "Idle"
+
+        self.write_message("Caution: Unlocked")
+        self._serial.write_line("ok")
+
+
     def probe(self, z_to):
         if self._feed_rate is None:
             self._serial.write_line("error:22")
             return
 
-        time.sleep(10)
-        self._serial.write_line("ALARM:5")
-        self._serial.write_line("[PRB:0.0000,0.0000,0.0000:0]")
-        self._serial.write_line("ok")
+        raise NotImplementedError()
+        # time.sleep(10)
+        # self._serial.write_line("ALARM:5")
+        # self._serial.write_line("[PRB:0.0000,0.0000,0.0000:0]")
+        # self._serial.write_line("ok")
 
 
     def move(self, x):
@@ -214,6 +225,11 @@ Mock Grbl hardware object that provides a serial address for connection.
             self.set_setting(key, value)
             return
 
+        match = re.compile(r"^\$X$").match(line)
+        if match:
+            self.unlock()
+            return
+
         match = re.compile(r"^G0 X([\d.]+)$").match(line)
         if match:
             (x, ) = match.groups()
@@ -236,19 +252,31 @@ Mock Grbl hardware object that provides a serial address for connection.
             "{MockGrbl unexpected request:%s}" % repr(line))
 
 
+    def write_message(self, message):
+        self._serial.write_line("[MSG:%s]" % message)
+
+
     def salutation(self):
         self._serial.write_line("")
         self._serial.write_line("Grbl 1.1f ['$' for help]")
         if self._settings[setting_index("homing-cycle-enable")]:
-            self._serial.write_line("[MSG:'$H'|'$X' to unlock]")
+            self.write_message("'$H'|'$X' to unlock")
         else:
             self._locked = False
 
 
     def run(self):
-        while True:
-            try:
-                line = self._serial.read_line(timeout=False)
-            except ConnectionClosedException:  # pragma: no cover
-                break
-            self.process_line(line)
+        try:
+            while True:
+                try:
+                    line = self._serial.read_line(timeout=False)
+                except ConnectionClosedException:  # pragma: no cover
+                    break
+                self.process_line(line)
+        except Exception as e:  # pragma: no cover
+            LOG.error("Unhandled exception in `MockGrbl.run`. Exiting.")
+            stream = io.StringIO()
+            traceback.print_exc(file=stream)
+            LOG.error("\n" + stream.getvalue())
+            LOG.error(e)
+            raise
