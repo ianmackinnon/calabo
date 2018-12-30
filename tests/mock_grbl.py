@@ -153,7 +153,11 @@ Mock Grbl hardware object that provides a serial address for connection.
 
 
     def write_state(self):
-        self._serial.write_line("<%s>" % self._state)
+        parts = [self._state]
+
+        parts.append("WCO:%.4f,%.4f,%.4f" % (0, 0, 0))
+
+        self._serial.write_line("<%s>" % "|".join(parts))
 
 
     def set_setting(self, key, value_str):

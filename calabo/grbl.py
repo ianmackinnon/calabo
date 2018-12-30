@@ -65,11 +65,12 @@ Grbl interface object.
             self._reset_device = None
 
         self._serial = Serial(device_address, name="ctrl", write_eol="\n")
-        self._state = None
-        self._homed = None
-        self._unlocked = None
-        self._settings = {}
         self._last_response = None
+
+        self._settings = {}
+        self._state = None
+        self._unlocked = None
+        self._wco = None
 
 
     def __enter__(self):
@@ -96,14 +97,18 @@ Grbl interface object.
             raise ResponseException("No salutation received")
 
         self._read_settings()
+        self.read_state()  # WCO should be sent on first request
+        assert self._wco is not None
+        self.read_state()  # Ov should be sent on second request
 
 
     def reset(self):
-        self._state = None
-        self._homed = None
-        self._unlocked = None
-        self._settings = {}
         self._last_response = None
+
+        self._settings = {}
+        self._state = None
+        self._unlocked = None
+        self._wco = None
 
         self.initialize()
 
@@ -114,7 +119,6 @@ Grbl interface object.
 
     @handle(r"^Grbl .* for help\]$")
     def _boot(self):
-        self._homed = False
         self._set_state("ready")
 
 
@@ -132,8 +136,6 @@ Grbl interface object.
         y = float(y)
         z = float(z)
         status = bool(int(status))
-
-        pass
 
 
     @handle(r"^ok$")
@@ -224,7 +226,21 @@ Grbl interface object.
             raise ResponseException("Unrecognised state %s in text %s" % (
                 repr(state), repr(text)))
 
+        re_wco = re.compile(r"^WCO:([\d.]+),([\d.]+),([\d.]+)$")
 
+        for part in parts:
+            match = re_wco.match(part)
+            if match:
+                (x, y, z) = (float(v) for v in match.groups())
+                if x or y or z:
+                    self._wco = {
+                        "x": x,
+                        "y": y,
+                        "z": z,
+                    }
+                else:
+                    self._wco = False
+                continue
 
         return state
 

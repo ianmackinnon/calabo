@@ -140,11 +140,8 @@ def test_unlock(grbl):
 
 
 
-# def test_wco(grbl):
-#     grbl.unlock()
-#     LOG.error(grbl._wco)
-#     grbl.read_state()
-#     LOG.error(grbl._wco)
+def test_wco(grbl):
+    assert grbl._wco is not None
 
 
 
