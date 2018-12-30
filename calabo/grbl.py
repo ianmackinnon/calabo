@@ -38,6 +38,12 @@ class SettingsException(Exception):
     pass
 
 
+
+def float_limit(value, fmt="f"):
+    return format(value, fmt).rstrip('0').rstrip('.')
+
+
+
 def handle(pattern):
     global HANDLERS
 
@@ -226,7 +232,7 @@ Grbl interface object.
             raise ResponseException("Unrecognised state %s in text %s" % (
                 repr(state), repr(text)))
 
-        re_wco = re.compile(r"^WCO:([\d.]+),([\d.]+),([\d.]+)$")
+        re_wco = re.compile(r"^WCO:(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)$")
 
         for part in parts:
             match = re_wco.match(part)
@@ -335,6 +341,19 @@ Grbl interface object.
 
     def unlock(self):
         self._serial.write_line("$X")
+        self._set_state("expect_ok")
+        self._step()
+
+
+    def set_wco(self, x=None, y=None, z=None):
+        if x is None and y is None and z is None:
+            self._serial.write_line("G92.1")
+        else:
+            self._serial.write_line("G92 X%s Y%s Z%s" % (
+                float_limit(x),
+                float_limit(y),
+                float_limit(z),
+            ))
         self._set_state("expect_ok")
         self._step()
 

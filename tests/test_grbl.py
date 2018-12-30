@@ -61,6 +61,12 @@ Error 22. Feed rate has not yet been set or is undefined.
     with pytest.raises(calabo.grbl_exc.GrblAlarmJogLockError):
         grbl.move(x=2)
 
+    with pytest.raises(calabo.grbl_exc.GrblAlarmJogLockError):
+        grbl.set_wco(1, 2, 3)
+
+    with pytest.raises(calabo.grbl_exc.GrblAlarmJogLockError):
+        grbl.set_wco()
+
     grbl.reset()
 
     # If device starts with homing disabled it need not be unlocked
@@ -71,10 +77,12 @@ Error 22. Feed rate has not yet been set or is undefined.
 
     homing_enabled = grbl.setting("homing-cycle-enable")
     assert homing_enabled is False
-    grbl.move(x=3)
+    grbl.move(x=1)
 
     grbl.setting("homing-cycle-enable", True)
-    grbl.move(x=4)
+    grbl.move(x=2)
+    grbl.set_wco(1, 2, 3)
+    grbl.set_wco()
 
 
 def test_error_10(grbl):
@@ -142,6 +150,28 @@ def test_unlock(grbl):
 
 def test_wco(grbl):
     assert grbl._wco is not None
+
+    grbl.unlock()
+
+    grbl.set_wco(1, 2, 3)
+    grbl.read_state()
+    wco_1 = grbl._wco
+    assert grbl._wco
+
+    grbl.set_wco(4, 5, 6)
+    grbl.read_state()
+    wco_2 = grbl._wco
+    assert grbl._wco
+    assert grbl._wco
+
+
+    grbl.set_wco()
+    grbl.read_state()
+    assert grbl._wco is False
+
+    grbl.set_wco()
+    grbl.read_state()
+    assert grbl._wco is False
 
 
 

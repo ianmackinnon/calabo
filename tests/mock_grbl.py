@@ -108,6 +108,7 @@ Mock Grbl hardware object that provides a serial address for connection.
         self._state = None
         self._locked = None
         self._feed_rate = None
+        self._wco = None
 
         if options and "settings" in options:
             self._settings.update(options["settings"])
@@ -137,6 +138,7 @@ Mock Grbl hardware object that provides a serial address for connection.
         self._state = "Idle"
         self._locked = False
         self._feed_rate = None
+        self._wco = None
 
         if self._settings[setting_index("homing-cycle-enable")]:
             self._state = "Alarm"
@@ -155,7 +157,12 @@ Mock Grbl hardware object that provides a serial address for connection.
     def write_state(self):
         parts = [self._state]
 
-        parts.append("WCO:%.4f,%.4f,%.4f" % (0, 0, 0))
+        if self._wco:
+            (x, y, z) = (self._wco["x"], self._wco["y"], self._wco["z"])
+        else:
+            (x, y, z) = (0, 0, 0)
+
+        parts.append("WCO:%.4f,%.4f,%.4f" % (x, y, z))
 
         self._serial.write_line("<%s>" % "|".join(parts))
 
@@ -194,6 +201,28 @@ Mock Grbl hardware object that provides a serial address for connection.
         # self._serial.write_line("ALARM:5")
         # self._serial.write_line("[PRB:0.0000,0.0000,0.0000:0]")
         # self._serial.write_line("ok")
+
+
+    def set_wco(self, x, y, z):
+        if self._locked:
+            self._serial.write_line("error:9")
+            return
+
+        self._wco = {
+            "x": x,
+            "y": y,
+            "z": z,
+        }
+        self._serial.write_line("ok")
+
+
+    def clear_wco(self):
+        if self._locked:
+            self._serial.write_line("error:9")
+            return
+
+        self._wco = False
+        self._serial.write_line("ok")
 
 
     def move(self, x):
@@ -250,6 +279,17 @@ Mock Grbl hardware object that provides a serial address for connection.
         if match:
             (z_to, ) = match.groups()
             self.probe(z_to)
+            return
+
+        match = re.compile(r"^G92 X(-?[\d.]+) Y(-?[\d.]+) Z(-?[\d.]+)$").match(line)
+        if match:
+            (x, y, z) = (float(v) for v in match.groups())
+            self.set_wco(x, y, z)
+            return
+
+        match = re.compile(r"^G92.1$").match(line)
+        if match:
+            self.clear_wco()
             return
 
         self._serial.write_line(
