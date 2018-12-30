@@ -78,7 +78,6 @@ Grbl interface object.
         self._unlocked = None
         self._wco = None
 
-
     def __enter__(self):
         self._serial.__enter__()
         self.initialize()
@@ -214,7 +213,7 @@ Grbl interface object.
         return self._step()
 
 
-    def _parse_state(self, text):
+    def _parse_state(self, text, expect_wco=None):
         if not text.startswith("<"):
             raise ResponseException("State does not start with <: %s" % repr(text))
         if not text.endswith(">"):
@@ -237,6 +236,7 @@ Grbl interface object.
         for part in parts:
             match = re_wco.match(part)
             if match:
+                expect_wco = False
                 (x, y, z) = (float(v) for v in match.groups())
                 if x or y or z:
                     self._wco = {
@@ -248,10 +248,15 @@ Grbl interface object.
                     self._wco = False
                 continue
 
+        if expect_wco:
+            raise ResponseException(
+                "Expected WCO in state: %s" % repr(text))
+
+
         return state
 
 
-    def read_state(self):
+    def read_state(self, expect_wco=None):
         self._serial._ser.write(("?").encode("utf-8"))
         response = ""
         while True:
@@ -262,7 +267,7 @@ Grbl interface object.
             if len(response) > 255:
                 break
 
-        return self._parse_state(response)
+        return self._parse_state(response, expect_wco=expect_wco)
 
 
     def _write_setting(self, key, value):
@@ -341,6 +346,16 @@ Grbl interface object.
 
     def unlock(self):
         self._serial.write_line("$X")
+        self._set_state("expect_ok")
+        self._step()
+
+
+    def use_unit(self, unit):
+        if unit not in ("mm", "inch"):
+            raise SettingsException("Unit may be 'mm' or 'inch'")
+
+        cmd = "G20" if unit == "inch" else "G21"
+        self._serial.write_line(cmd)
         self._set_state("expect_ok")
         self._step()
 

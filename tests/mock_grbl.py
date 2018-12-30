@@ -29,7 +29,7 @@ from subprocess import Popen, PIPE
 # Calabo imports
 sys.path.append("../")
 from calabo.serial import Serial, ConnectionClosedException
-from calabo.grbl_settings import SETTINGS, setting_index, \
+from calabo.grbl_settings import MM_TO_INCHES, SETTINGS, setting_index, \
     setting_from_string, setting_to_string
 
 
@@ -110,6 +110,8 @@ Mock Grbl hardware object that provides a serial address for connection.
         self._feed_rate = None
         self._wco = None
 
+        self._read_inches = None
+
         if options and "settings" in options:
             self._settings.update(options["settings"])
 
@@ -154,15 +156,35 @@ Mock Grbl hardware object that provides a serial address for connection.
         self._serial.write_line("ok")
 
 
+    def report_distance(self, value):
+        """
+        Return `value` as a string, in the units specified by setting 13.
+        """
+        if self._settings[setting_index("report-in-inches")]:
+            value /= MM_TO_INCHES
+        return "%.4f" % value
+
+
+    def read_distance(self, text):
+        """
+        Read `text` as a float, in the units specified by G20/G21.
+        """
+
+        value = float(text)
+        if self._read_inches:
+            value *= MM_TO_INCHES
+        return value
+
+
     def write_state(self):
         parts = [self._state]
 
         if self._wco:
-            (x, y, z) = (self._wco["x"], self._wco["y"], self._wco["z"])
+            (x, y, z) = (-self._wco["x"], -self._wco["y"], -self._wco["z"])
         else:
             (x, y, z) = (0, 0, 0)
 
-        parts.append("WCO:%.4f,%.4f,%.4f" % (x, y, z))
+        parts.append("WCO:%s" % ",".join([self.report_distance(v) for v in (x, y, z)]))
 
         self._serial.write_line("<%s>" % "|".join(parts))
 
@@ -204,6 +226,10 @@ Mock Grbl hardware object that provides a serial address for connection.
 
 
     def set_wco(self, x, y, z):
+        """
+        Set WCO in millimeters.
+        """
+
         if self._locked:
             self._serial.write_line("error:9")
             return
@@ -213,6 +239,20 @@ Mock Grbl hardware object that provides a serial address for connection.
             "y": y,
             "z": z,
         }
+        self._serial.write_line("ok")
+
+
+    def clear_wco(self):
+        if self._locked:
+            self._serial.write_line("error:9")
+            return
+
+        self._wco = False
+        self._serial.write_line("ok")
+
+
+    def read_inches(self, value):
+        self._read_inches = value
         self._serial.write_line("ok")
 
 
@@ -283,13 +323,23 @@ Mock Grbl hardware object that provides a serial address for connection.
 
         match = re.compile(r"^G92 X(-?[\d.]+) Y(-?[\d.]+) Z(-?[\d.]+)$").match(line)
         if match:
-            (x, y, z) = (float(v) for v in match.groups())
+            (x, y, z) = (self.read_distance(v) for v in match.groups())
             self.set_wco(x, y, z)
             return
 
         match = re.compile(r"^G92.1$").match(line)
         if match:
             self.clear_wco()
+            return
+
+        match = re.compile(r"^G20$").match(line)
+        if match:
+            self.read_inches(True)
+            return
+
+        match = re.compile(r"^G21$").match(line)
+        if match:
+            self.read_inches(False)
             return
 
         self._serial.write_line(

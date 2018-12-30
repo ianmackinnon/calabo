@@ -22,6 +22,8 @@ LOG = logging.getLogger("calabo.grbl_settings")
 DEFAULT_INT = 255
 DEFAULT_FLOAT = 2147483.648
 
+MM_TO_INCHES = 25.4
+
 SETTINGS = {
     0: {
         "name": "step-pulse-time",

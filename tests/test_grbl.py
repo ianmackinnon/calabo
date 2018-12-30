@@ -19,6 +19,7 @@ import pytest
 # Calabo imports
 sys.path.append("../")
 import calabo.grbl_exc
+from calabo.grbl_settings import MM_TO_INCHES
 
 
 
@@ -147,6 +148,49 @@ def test_unlock(grbl):
 
 
 
+def test_distance_units(grbl):
+    p = {
+        "x": 1,
+        "y": 0.222,
+        "z": -33.33,
+    }
+
+    grbl.unlock()
+
+    grbl.use_unit("mm")
+    grbl.setting("report-in-inches", True)
+    grbl.set_wco(**p)
+    grbl.read_state(expect_wco=True)
+
+    for k, v in p.items():
+        assert grbl._wco[k] == pytest.approx(-v / MM_TO_INCHES, abs=1e-3)
+
+    grbl.setting("report-in-inches", False)
+    grbl.read_state(expect_wco=True)
+
+    for k, v in p.items():
+        assert grbl._wco[k] == pytest.approx(-v, abs=1e-3)
+
+    grbl.use_unit("inch")
+    grbl.setting("report-in-inches", True)
+    grbl.read_state(expect_wco=True)
+
+    for k, v in p.items():
+        assert grbl._wco[k] == pytest.approx(-v / MM_TO_INCHES, abs=1e-3)
+
+    grbl.set_wco(**p)
+    grbl.read_state(expect_wco=True)
+
+    for k, v in p.items():
+        assert grbl._wco[k] == pytest.approx(-v, abs=1e-3)
+
+    grbl.setting("report-in-inches", False)
+    grbl.read_state(expect_wco=True)
+
+    for k, v in p.items():
+        assert grbl._wco[k] == pytest.approx(-v * MM_TO_INCHES, abs=1e-3)
+
+
 
 def test_wco(grbl):
     assert grbl._wco is not None
@@ -163,7 +207,6 @@ def test_wco(grbl):
     wco_2 = grbl._wco
     assert grbl._wco
     assert grbl._wco
-
 
     grbl.set_wco()
     grbl.read_state()
